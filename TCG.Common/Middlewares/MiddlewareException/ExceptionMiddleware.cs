@@ -1,16 +1,18 @@
 ﻿using Microsoft.AspNetCore.Http;
 using System.ComponentModel.DataAnnotations;
 using System.Net;
+using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.Extensions.Logging;
 
 namespace TCG.Common.Middlewares.MiddlewareException
 {
     public class ExceptionMiddleware
     {
         private readonly RequestDelegate _next;
-        //private readonly ILogger _logger;
-        public ExceptionMiddleware(RequestDelegate next)
+        private readonly ILogger _logger;
+        public ExceptionMiddleware(RequestDelegate next, ILogger<ExceptionMiddleware> logger)
         {
-            //_logger = logger;
+            _logger = logger;
             _next = next;
         }
         public async Task InvokeAsync(HttpContext httpContext)
@@ -19,17 +21,8 @@ namespace TCG.Common.Middlewares.MiddlewareException
             {
                 await _next(httpContext);
             }
-            catch (ValidationException ex)
-            {
-                await HandleExceptionAsync(httpContext, ex);
-            }
-            catch (NotFoundException ex)
-            {
-                await HandleExceptionAsync(httpContext, ex);
-            }
             catch (Exception ex)
             {
-                //_logger.LogError($"Something went wrong: {ex}");
                 await HandleExceptionAsync(httpContext, ex);
             }
         }
@@ -40,45 +33,28 @@ namespace TCG.Common.Middlewares.MiddlewareException
             {
                 case ValidationException validationException:
                     context.Response.StatusCode = (int)HttpStatusCode.BadRequest;
-                    await context.Response.WriteAsync(new ErrorDetails()
-                    {
-                        StatusCode = context.Response.StatusCode,
-                        Message = validationException.Message
-                    }.ToString());
                     break;
                 case NotFoundException notFoundException:
                     context.Response.StatusCode = (int)HttpStatusCode.NotFound;
-                    await context.Response.WriteAsync(new ErrorDetails()
-                    {
-                        StatusCode = context.Response.StatusCode,
-                        Message = notFoundException.Message
-                    }.ToString());
                     break;
                 case UserAlreadyExistsException userAlreadyExistsException:
-                    context.Response.StatusCode = StatusCodes.Status409Conflict;
-                    await context.Response.WriteAsync(new ErrorDetails()
-                    {
-                        StatusCode = context.Response.StatusCode,
-                        Message = userAlreadyExistsException.Message
-                    }.ToString());
+                    context.Response.StatusCode = (int)HttpStatusCode.Conflict;
                     break;
                 case UnAuthorizedException unAuthorizedException:
-                    context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                    await context.Response.WriteAsync(new ErrorDetails()
-                    {
-                        StatusCode = context.Response.StatusCode,
-                        Message = unAuthorizedException.Message
-                    }.ToString());
+                    context.Response.StatusCode = (int)HttpStatusCode.Unauthorized;
                     break;
                 default:
                     context.Response.StatusCode = (int)HttpStatusCode.InternalServerError;
-                    await context.Response.WriteAsync(new ErrorDetails()
-                    {
-                        StatusCode = context.Response.StatusCode,
-                        Message = "Internal Server Error."
-                    }.ToString());
                     break;
             }
+            
+            _logger.LogError($"Retour erreur http avec le code {context.Response.StatusCode} pour message : {exception.Message}");
+
+            await context.Response.WriteAsync(new ErrorDetails()
+            {
+                StatusCode = context.Response.StatusCode,
+                Message = exception.Message
+            }.ToString());
         }
     }
 }
